@@ -11,12 +11,35 @@ no bypass.
 ## What it blocks
 
 - **Medical search queries** on Google, Bing, DuckDuckGo, Yahoo, Ecosia, Startpage,
-  Brave, and Qwant — when the query contains medical terms (symptoms, conditions,
-  drug/dosage words, or anxious phrases like "am I dying").
+  Brave, and Qwant.
 - **Known medical sites** — WebMD, Mayo Clinic, Healthline, Drugs.com, MedlinePlus,
   NIH, Cleveland Clinic, and more.
 
 Both lists are extendable on the options page.
+
+### How a query is judged
+
+Vague phrasings like "do i have" are grammar, not medicine — matching them outright
+blocks "do i have to pay taxes". So queries are judged in tiers (see `src/detect.js`):
+
+| tier | rule | example |
+| --- | --- | --- |
+| 1 | an unambiguously medical term, alone | `diabetes`, `ibuprofen dosage` |
+| 2 | a body part **and** a sensation | `knee hurts`, `back pain` |
+| 3 | a body part **and** a question framing | `why does my knee click` |
+
+Tiers 2 and 3 both require a body part, which is what keeps "why does my car shake"
+out. Tier 3 additionally ignores body parts that double as everyday words
+(`AMBIGUOUS_PARTS`), since a framing alone can't separate "why does my back hurt"
+from "why does my back button not work" — only a sensation can.
+
+Terms you add yourself on the options page are treated as tier 1 and block on their own.
+
+## Tests
+
+Open `test/detect.test.html` in a browser. It exercises `src/detect.js` against a table
+of queries that must block and must not, and prints a pass/fail summary. Worth a look
+after editing any list in `src/data.js`.
 
 ## Install (load unpacked)
 

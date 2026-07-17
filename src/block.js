@@ -3,8 +3,17 @@
 // full-screen ASCII overlay (hard block, no bypass).
 
 (function () {
-  const { MEDICAL_KEYWORDS, MEDICAL_DOMAINS, SEARCH_ENGINES, CHARACTERS } = window.DR_NO_DATA;
-  const { isBlockedSite, getSearchQuery, matchMedicalKeyword } = window.DR_NO_DETECT;
+  const {
+    MEDICAL_KEYWORDS,
+    CONTEXT_PHRASES,
+    BODY_PARTS,
+    AMBIGUOUS_PARTS,
+    SENSATIONS,
+    MEDICAL_DOMAINS,
+    SEARCH_ENGINES,
+    CHARACTERS,
+  } = window.DR_NO_DATA;
+  const { isBlockedSite, getSearchQuery, matchMedical } = window.DR_NO_DETECT;
 
   const root = document.documentElement;
 
@@ -14,9 +23,15 @@
     if (isBlockedSite(location.hostname, domains)) {
       return 'This looks like a medical site.';
     }
-    const keywords = MEDICAL_KEYWORDS.concat(extraKeywords || []);
     const query = getSearchQuery(location.href, SEARCH_ENGINES);
-    const hit = matchMedicalKeyword(query, keywords);
+    // Terms the user added themselves are Tier 1: they block on their own.
+    const hit = matchMedical(query, {
+      strong: MEDICAL_KEYWORDS.concat(extraKeywords || []),
+      context: CONTEXT_PHRASES,
+      bodyParts: BODY_PARTS,
+      ambiguousParts: AMBIGUOUS_PARTS,
+      sensations: SENSATIONS,
+    });
     if (hit) return 'That search looks medical (“' + hit + '”).';
     return null;
   }

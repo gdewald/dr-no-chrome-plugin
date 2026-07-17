@@ -30,24 +30,79 @@ function getSearchQuery(url, engines) {
   return null;
 }
 
-// If any keyword appears in the query, return the matched keyword; else null.
-function matchMedicalKeyword(query, keywords) {
-  if (!query) return null;
-  const q = ' ' + query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ') + ' ';
-  for (const kw of keywords) {
-    const k = kw.toLowerCase();
-    if (k.includes(' ')) {
-      // multi-word phrase: substring match on the normalized query
-      if (q.includes(' ' + k + ' ') || q.includes(k)) return kw;
-    } else {
-      // single word: whole-word match to avoid "std" matching "understand"
-      if (q.includes(' ' + k + ' ')) return kw;
-    }
+// Reduce a query to " word word " so terms can be matched on whole-word
+// boundaries: punctuation becomes spaces, runs of space collapse, and the
+// padding lets a term at either end still match.
+function normalizeQuery(query) {
+  if (!query) return '';
+  const cleaned = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned ? ' ' + cleaned + ' ' : '';
+}
+
+// First term of `terms` present in an already-normalized query, else null.
+// Matches the bare term and its simple plural, so "headache" catches
+// "headaches" and "knee" catches "knees".
+function findTerm(normalized, terms) {
+  if (!normalized || !terms) return null;
+  for (const raw of terms) {
+    const term = String(raw).toLowerCase().trim();
+    if (!term) continue;
+    if (normalized.includes(' ' + term + ' ')) return raw;
+    if (normalized.includes(' ' + term + 's ')) return raw;
   }
+  return null;
+}
+
+// Decide whether a search query is medical, in tiers:
+//
+//   1. a Tier 1 term, medical on its own      -> "diabetes"
+//   2. a body part plus a sensation           -> "knee hurts"
+//   3. a body part plus a question framing    -> "why does my knee click"
+//
+// Tiers 2 and 3 both require a body part. That requirement is the whole point:
+// it is what keeps the vague framings from firing on "do i have to pay taxes".
+// Returns a short description of the match for the block message, else null.
+function matchMedical(query, lists) {
+  const q = normalizeQuery(query);
+  if (!q) return null;
+
+  const strong = findTerm(q, lists.strong);
+  if (strong) return strong;
+
+  const part = findTerm(q, lists.bodyParts);
+  if (!part) return null;
+
+  // Tier 2 — any body part, disambiguated by a sensation.
+  const sensation = findTerm(q, lists.sensations);
+  if (sensation) return part + ' ' + sensation;
+
+  // Tier 3 — a framing is weaker evidence than a sensation, so it only counts
+  // against a body part with no everyday sense. "why does my knee click" yes;
+  // "why does my back button not work" no.
+  const vague = new Set((lists.ambiguousParts || []).map((p) => String(p).toLowerCase()));
+  const solidPart = findTerm(
+    q,
+    lists.bodyParts.filter((p) => !vague.has(String(p).toLowerCase()))
+  );
+  if (solidPart) {
+    const context = findTerm(q, lists.context);
+    if (context) return context + ' ' + solidPart;
+  }
+
   return null;
 }
 
 // Expose for pages / tests.
 if (typeof window !== 'undefined') {
-  window.DR_NO_DETECT = { isBlockedSite, getSearchQuery, matchMedicalKeyword };
+  window.DR_NO_DETECT = {
+    isBlockedSite,
+    getSearchQuery,
+    normalizeQuery,
+    findTerm,
+    matchMedical,
+  };
 }

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>detect harness</title></head>
+<body>
+<pre id="out" style="font: 13px/1.45 monospace;">running…</pre>
+
+<script src="../src/data.js"></script>
+<script src="../src/detect.js"></script>
+<script>
+(function () {
+  const D = window.DR_NO_DATA;
+  const T = window.DR_NO_DETECT;
+  const lists = {
+    strong: D.MEDICAL_KEYWORDS,
+    context: D.CONTEXT_PHRASES,
+    bodyParts: D.BODY_PARTS,
+    ambiguousParts: D.AMBIGUOUS_PARTS,
+    sensations: D.SENSATIONS,
+  };
+  const hit = (q) => T.matchMedical(q, lists);
+
+  // [query, shouldBlock]
+  const cases = [
+    // --- must ALLOW: the false positives that started this ---
+    ['do i have to pay taxes', false],
+    ['do i have enough ram for this game', false],
+    ['why does my car shake at 60mph', false],
+    ['why do i need a visa for brazil', false],
+    ['is it normal to tip 20%', false],
+    ['laptop wont stop updating', false],
+    ['diagnose engine misfire', false],
+    ['what causes inflation', false],
+    ['pizza near me', false],
+    ['back to school sale', false],
+    ['why does my back button not work', false],
+    ['why does my hand brake stick', false],
+    ['is it normal for my heart rate monitor to beep', false],
+    ['understand quantum computing', false],
+
+    // --- must ALLOW: ambiguous words removed from tier 1 ---
+    ['std::vector iterator', false],
+    ['std::unique_ptr example', false],
+    ['lump sum tax', false],
+    ['bleeding edge tech', false],
+    ['great depression causes', false],
+    ['breast stroke technique', false],
+    ['stroke of luck', false],
+    ['metal fatigue analysis', false],
+    ['rash decision meaning', false],
+    ['cramp my style', false],
+
+    // --- must BLOCK: tier 1, medical on its own ---
+    ['headache symptoms', true],
+    ['do i have diabetes', true],
+    ['am i dying', true],
+    ['sore throat remedy', true],
+    ['ibuprofen dosage', true],
+    ['headaches every morning', true],
+
+    // --- must BLOCK: tier 2, body part + sensation ---
+    ['why does my knee hurt', true],
+    ['my knee hurts', true],
+    ['back pain', true],
+    ['swollen ankle', true],
+    ['my knees ache', true],
+
+    // ambiguous parts must still block when a sensation is present
+    ['why does my back hurt', true],
+    ['my hand is swollen', true],
+
+    // sensations demoted from tier 1 must still block via tier 2
+    ['lump on my neck', true],
+    ['bleeding gums', true],
+    ['rash on my arm', true],
+    ['leg cramp', true],
+
+    // the removed conditions still block when phrased as a symptom search
+    ['depression symptoms', true],
+    ['stroke symptoms', true],
+    ['std symptoms', true],
+
+    // --- must BLOCK: tier 3, body part + framing ---
+    ['why does my eye twitch', true],
+    ['why does my knee click', true],
+    ['is it normal for my tooth to be sensitive', true],
+    ['do i have a lump on my neck', true],
+  ];
+
+  const lines = [];
+  let pass = 0, fail = 0;
+  for (const [q, want] of cases) {
+    const got = hit(q);
+    const blocked = !!got;
+    const ok = blocked === want;
+    ok ? pass++ : fail++;
+    lines.push(
+      (ok ? 'ok   ' : 'FAIL ') +
+      (blocked ? 'BLOCK' : 'allow').padEnd(6) +
+      JSON.stringify(q).padEnd(46) +
+      (got ? 'matched: ' + got : '')
+    );
+  }
+  lines.push('');
+  lines.push('passed ' + pass + ' / ' + cases.length + (fail ? '  ** ' + fail + ' FAILED **' : '  ALL PASS'));
+
+  // Informational: coverage knowingly given up when std / stroke / depression /
+  // fatigue were removed from tier 1. These are expected to read "allow" — the
+  // price of never hard-blocking std::vector. Not asserted, just visible.
+  lines.push('');
+  lines.push('--- accepted coverage losses (informational) ---');
+  for (const q of ['am i depressed', 'signs of a stroke', 'having a stroke',
+                   'chronic fatigue', 'do i have an std', 'seasonal depression']) {
+    const g = hit(q);
+    lines.push((g ? 'BLOCK' : 'allow').padEnd(6) + JSON.stringify(q).padEnd(24) + (g ? 'matched: ' + g : ''));
+  }
+
+  document.getElementById('out').textContent = lines.join('\n');
+})();
+</script>
+</body>
+</html>
