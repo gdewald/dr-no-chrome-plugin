@@ -97,21 +97,27 @@ function matchMedical(query, lists) {
 }
 
 // Decide whether a query that matchMedical allowed is still suspicious enough
-// to ask the on-device AI arbiter (the "gray zone"). Two shapes qualify:
+// to ask the on-device AI arbiter (the "gray zone"). Three shapes qualify:
 //
-//   - a sensation with no body part           -> "itchy all over"
+//   - a medical-leaning phrase that also has
+//     a non-medical life                       -> "side effects of ..."
+//   - a sensation with no body part            -> "itchy all over"
 //   - a body part plus a question framing
-//     that tier 3 rejected as ambiguous       -> "why does my back keep clicking"
+//     that tier 3 rejected as ambiguous        -> "why does my back keep clicking"
 //
 // These are exactly the queries the static tiers deliberately let through to
-// avoid false positives ("lump sum tax", "why does my back button not work") —
-// a model can tell those apart where word lists cannot. Returns a short
-// description of the suspicion for the block message, else null. A query that
-// matchMedical already blocks is never gray.
+// avoid false positives ("side effects of old fuel on engine", "lump sum tax",
+// "why does my back button not work") — a model can tell those apart where
+// word lists cannot. Returns a short description of the suspicion for the
+// block message, else null. A query that matchMedical already blocks is never
+// gray.
 function matchGray(query, lists) {
   if (matchMedical(query, lists)) return null;
   const q = normalizeQuery(query);
   if (!q) return null;
+
+  const keyword = findTerm(q, lists.ambiguousKeywords || []);
+  if (keyword) return keyword;
 
   const part = findTerm(q, lists.bodyParts);
   const sensation = findTerm(q, lists.sensations);

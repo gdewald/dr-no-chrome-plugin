@@ -24,8 +24,10 @@ const MEDICAL_KEYWORDS = [
   'anaemia', 'thyroid', 'arthritis', 'asthma', 'allergy', 'allergic', 'ulcer',
   'appendicitis', 'meningitis', 'sepsis', 'blood clot', 'aneurysm', 'seizure',
   'anxiety disorder', 'adhd', 'autism', 'dementia', 'alzheimer',
-  // drugs / treatment
-  'dosage', 'dose of', 'mg of', 'side effects', 'side effect of', 'overdose',
+  // drugs / treatment. "side effects" is deliberately absent — cars, software
+  // updates, and policies have side effects too, so it lives in
+  // AMBIGUOUS_KEYWORDS and is decided by the AI arbiter instead.
+  'dosage', 'dose of', 'mg of', 'overdose',
   'ibuprofen', 'acetaminophen', 'paracetamol', 'aspirin', 'antibiotic',
   'medication', 'prescription', 'how to treat', 'treatment for', 'cure for',
   'remedy for', 'home remedy',
@@ -33,6 +35,13 @@ const MEDICAL_KEYWORDS = [
   'am i dying', 'what disease', 'should i go to the er', 'should i see a doctor',
   'emergency room', 'urgent care',
 ];
+
+// Medical-leaning phrases with a real non-medical life: "side effects of old
+// fuel on engine", "side effects of the new update". Too risky to hard-block
+// alone, too medical to ignore — so they escalate to the on-device AI arbiter
+// (gray zone) and block only if it says the query is medical. findTerm's
+// simple-plural rule means 'side effect' covers "side effects" too.
+const AMBIGUOUS_KEYWORDS = ['side effect'];
 
 // Tier 2 — question framings. These are grammar, not medicine: they only mean
 // something medical once the query also names a body part. On their own they
@@ -160,6 +169,7 @@ const CHARACTERS = {
 if (typeof window !== 'undefined') {
   window.DR_NO_DATA = {
     MEDICAL_KEYWORDS,
+    AMBIGUOUS_KEYWORDS,
     CONTEXT_PHRASES,
     BODY_PARTS,
     AMBIGUOUS_PARTS,

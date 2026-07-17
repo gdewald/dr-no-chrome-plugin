@@ -12,6 +12,7 @@
   const T = window.DR_NO_DETECT;
   const lists = {
     strong: D.MEDICAL_KEYWORDS,
+    ambiguousKeywords: D.AMBIGUOUS_KEYWORDS,
     context: D.CONTEXT_PHRASES,
     bodyParts: D.BODY_PARTS,
     ambiguousParts: D.AMBIGUOUS_PARTS,
@@ -49,6 +50,11 @@
     ['rash decision meaning', false],
     ['cramp my style', false],
 
+    // --- must ALLOW statically: "side effects" demoted to the gray zone ---
+    ['side effects of old fuel on engine', false],
+    ['side effects of the new ios update', false],
+    ['minimum wage increase side effects', false],
+
     // --- must BLOCK: tier 1, medical on its own ---
     ['headache symptoms', true],
     ['do i have diabetes', true],
@@ -78,6 +84,10 @@
     ['depression symptoms', true],
     ['stroke symptoms', true],
     ['std symptoms', true],
+
+    // drug-name queries still block via the drug itself, not "side effects"
+    ['ibuprofen side effects', true],
+    ['side effects of aspirin', true],
 
     // --- must BLOCK: tier 3, body part + framing ---
     ['why does my eye twitch', true],
@@ -126,6 +136,10 @@
     ['random bruise appeared', true],
     ['lump sum tax', true],
     ['bleeding edge tech', true],
+    // ambiguous keyword -> gray (AI decides; engine fuel expected NO there)
+    ['side effects of old fuel on engine', true],
+    ['birth control side effects', true],
+    ['lisinopril side effects', true],
   ];
 
   lines.push('');

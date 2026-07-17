@@ -6,6 +6,7 @@
 (function () {
   const {
     MEDICAL_KEYWORDS,
+    AMBIGUOUS_KEYWORDS,
     CONTEXT_PHRASES,
     BODY_PARTS,
     AMBIGUOUS_PARTS,
@@ -27,6 +28,7 @@
   function buildLists(extraKeywords) {
     return {
       strong: MEDICAL_KEYWORDS.concat(extraKeywords || []),
+      ambiguousKeywords: AMBIGUOUS_KEYWORDS,
       context: CONTEXT_PHRASES,
       bodyParts: BODY_PARTS,
       ambiguousParts: AMBIGUOUS_PARTS,

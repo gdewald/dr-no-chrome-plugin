@@ -12,9 +12,9 @@ const SYSTEM_PROMPT =
   'health: symptoms, illness, injury, medication, or self-diagnosis. ' +
   'Reply NO otherwise. Reply with exactly one word: YES or NO.';
 
-// Small on-device models follow examples better than instructions. These four
-// mirror the two gray-zone shapes: ambiguous body part + framing, and
-// sensation without a body part.
+// Small on-device models follow examples better than instructions. These pairs
+// mirror the three gray-zone shapes: ambiguous body part + framing, sensation
+// without a body part, and ambiguous medical-leaning keywords.
 const FEW_SHOT = [
   { role: 'user', content: 'why does my back keep clicking' },
   { role: 'assistant', content: 'YES' },
@@ -23,6 +23,10 @@ const FEW_SHOT = [
   { role: 'user', content: 'itchy all over' },
   { role: 'assistant', content: 'YES' },
   { role: 'user', content: 'bleeding edge tech' },
+  { role: 'assistant', content: 'NO' },
+  { role: 'user', content: 'birth control side effects' },
+  { role: 'assistant', content: 'YES' },
+  { role: 'user', content: 'side effects of old fuel on engine' },
   { role: 'assistant', content: 'NO' },
 ];
 

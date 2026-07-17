@@ -37,11 +37,14 @@ Terms you add yourself on the options page are treated as tier 1 and block on th
 
 ### The gray zone: on-device AI arbiter
 
-Word lists can't call everything. Two query shapes are suspicious but unprovable:
+Word lists can't call everything. Three query shapes are suspicious but unprovable:
 
 - an ambiguous body part with a question framing — "why does my back keep clicking"
   vs "why does my back button not work"
 - a sensation with no body part — "itchy all over" vs "lump sum tax"
+- a medical-leaning phrase with a non-medical life (`AMBIGUOUS_KEYWORDS`, e.g.
+  "side effects") — "birth control side effects" vs "side effects of old fuel
+  on engine"
 
 The static tiers deliberately allow all of these (false positives are worse than
 misses for a hard-block tool). With the AI arbiter enabled, such queries are instead
