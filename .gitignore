@@ -1,0 +1,14 @@
+# Build artifacts — the shareable zip is generated from source.
+dist/
+*.zip
+
+# Chrome packs .crx alongside a private signing key; never commit the key.
+*.crx
+*.pem
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
