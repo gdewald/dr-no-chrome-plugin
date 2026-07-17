@@ -19,6 +19,9 @@
     enabled: document.getElementById('enabled'),
     aiEnabled: document.getElementById('aiEnabled'),
     aiStatus: document.getElementById('aiStatus'),
+    aiProgress: document.getElementById('aiProgress'),
+    aiBar: document.getElementById('aiBar'),
+    aiFill: document.getElementById('aiFill'),
     aiDownload: document.getElementById('aiDownload'),
     extraKeywords: document.getElementById('extraKeywords'),
     extraSites: document.getElementById('extraSites'),
@@ -60,46 +63,92 @@
   }
 
   // The Prompt API is exposed to extension pages directly, so the options page
-  // can report model state itself — and the download button runs here because
+  // can report model state itself — and the download button lives here because
   // starting a model download needs a user gesture.
-  async function refreshAiStatus() {
-    const api = typeof LanguageModel !== 'undefined' ? LanguageModel : null;
-    if (!api) {
-      els.aiStatus.textContent =
-        'Not supported by this Chrome (needs Chrome 138+ with built-in AI). Keyword rules still work.';
-      return;
-    }
-    let availability;
+  //
+  // Download UX is driven by two signals at once:
+  //  - downloadprogress events on the create() monitor. These only reach the
+  //    create() call this page made, can be sparse, and die with the page, so
+  //    they're a bonus: they upgrade the bar from indeterminate to a percentage.
+  //  - a 2s availability() poll — the reliable signal. It catches downloads
+  //    started on a previous visit, downloads finishing while the page is open,
+  //    and progress events that never arrive.
+  const AI_POLL_MS = 2000;
+  // Last availability state painted. Ticks that observe the same state skip
+  // repainting so they don't clobber a percentage or an error message.
+  let paintedState = null;
+
+  async function aiAvailability() {
+    if (typeof LanguageModel === 'undefined') return 'unsupported';
     try {
-      availability = await api.availability();
+      return await LanguageModel.availability();
     } catch (e) {
-      availability = 'unavailable';
+      return 'unavailable';
     }
-    els.aiDownload.style.display = availability === 'downloadable' ? 'inline-block' : 'none';
+  }
+
+  function showProgressBar(pct) {
+    els.aiProgress.style.display = 'block';
+    if (pct == null) {
+      els.aiBar.classList.add('indeterminate');
+      els.aiFill.style.width = '30%';
+    } else {
+      els.aiBar.classList.remove('indeterminate');
+      els.aiFill.style.width = pct + '%';
+    }
+  }
+
+  function paintAiStatus(state) {
+    els.aiDownload.style.display = state === 'downloadable' ? 'inline-block' : 'none';
+    if (state === 'downloading') showProgressBar(null);
+    else els.aiProgress.style.display = 'none';
     els.aiStatus.textContent =
-      availability === 'available' ? 'Model ready — borderline searches are checked on-device.'
-      : availability === 'downloading' ? 'Model downloading… borderline searches allowed until it finishes.'
-      : availability === 'downloadable' ? 'Model not downloaded yet. Until then only the keyword rules apply.'
+      state === 'available' ? 'Model ready — borderline searches are checked on-device.'
+      : state === 'downloading' ? 'Downloading model… It’s a few GB, so this can take several minutes. ' +
+        'Chrome keeps downloading even if you close this page.'
+      : state === 'downloadable' ? 'Model not downloaded yet. Until then only the keyword rules apply.'
+      : state === 'unsupported' ? 'Not supported by this Chrome (needs Chrome 138+ with built-in AI). Keyword rules still work.'
       : 'Model unavailable on this device (hardware requirements not met). Keyword rules still work.';
   }
 
+  async function aiTick() {
+    const state = await aiAvailability();
+    if (state === paintedState) return;
+    paintedState = state;
+    paintAiStatus(state);
+  }
+
   els.aiDownload.addEventListener('click', async () => {
-    els.aiDownload.disabled = true;
+    // Paint before anything async: availability() can keep reporting
+    // 'downloadable' for a while after the download has really started, and
+    // the first progress event may be a long way off.
+    paintedState = 'downloading';
+    paintAiStatus('downloading');
     try {
       const session = await LanguageModel.create({
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
-            els.aiStatus.textContent = 'Downloading model… ' + Math.round(e.loaded * 100) + '%';
+            // Spec says loaded is a 0..1 fraction; some builds report bytes.
+            const frac = e.total > 1 ? e.loaded / e.total : e.loaded;
+            const pct = Math.max(0, Math.min(100, Math.round((frac || 0) * 100)));
+            showProgressBar(pct);
+            els.aiStatus.textContent = 'Downloading model… ' + pct + '%';
           });
         },
       });
       session.destroy(); // only needed to trigger the download
+      paintedState = null; // force the next tick to repaint (normally 'available')
+      aiTick();
     } catch (e) {
+      // Repaint from real state (restores the retry button), then overlay the
+      // error; matching paintedState keeps ticks from wiping it.
+      paintedState = await aiAvailability();
+      paintAiStatus(paintedState);
       els.aiStatus.textContent = 'Model download failed: ' + e.message;
     }
-    els.aiDownload.disabled = false;
-    refreshAiStatus();
   });
+
+  setInterval(aiTick, AI_POLL_MS);
 
   function load() {
     chrome.storage.sync.get(DEFAULTS, (s) => {
@@ -109,7 +158,7 @@
       els.extraSites.value = (s.extraSites || []).join('\n');
       renderCharacters(s.character || 'cat');
     });
-    refreshAiStatus();
+    aiTick();
   }
 
   function save() {

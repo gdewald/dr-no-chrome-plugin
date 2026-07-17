@@ -60,8 +60,11 @@ Properties:
   so a repeated search never waits on the model twice.
 - **Requirements:** Chrome 138+, and the built-in model available on the device
   (Chrome gates it on hardware — roughly a few GB of free disk and a capable
-  GPU/CPU). The options page shows model status and a download button if the model
-  isn't installed yet. The arbiter can be turned off there too.
+  GPU/CPU). The options page shows live model status, a download button if the
+  model isn't installed yet, and a progress bar while it downloads (the download
+  is Chrome-managed and continues even if the page is closed; the page polls
+  every 2s, so status updates without a reload). The arbiter can be turned off
+  there too.
 
 While the arbiter thinks, the page stays hidden (same no-flash trick as static
 matches), then either the overlay renders or the page is revealed.

@@ -42,6 +42,10 @@
     button.save:hover { background: #7dd3fc; }
     #status { margin-left: 14px; color: #4ade80; font-weight: 600; opacity: 0; transition: opacity .2s ease; }
     #status.show { opacity: 1; }
+    .bar { height: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 9999px; overflow: hidden; }
+    .bar .fill { height: 100%; width: 0%; background: #38bdf8; border-radius: 9999px; transition: width .3s ease; }
+    .bar.indeterminate .fill { width: 30%; animation: dr-no-slide 1.2s linear infinite; }
+    @keyframes dr-no-slide { from { margin-left: -30%; } to { margin-left: 100%; } }
   </style>
 </head>
 <body>
@@ -63,6 +67,9 @@
         Chrome's built-in model (Gemini Nano). Runs entirely on this device; nothing is sent anywhere.</span></label>
     </div>
     <p class="hint" id="aiStatus" style="margin:10px 0 0 30px;"></p>
+    <div id="aiProgress" style="display:none; margin:10px 0 0 30px;">
+      <div class="bar" id="aiBar"><div class="fill" id="aiFill"></div></div>
+    </div>
     <button type="button" class="save" id="aiDownload" style="display:none; margin:10px 0 0 30px;">Download model</button>
   </section>
 
