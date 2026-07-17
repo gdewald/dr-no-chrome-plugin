@@ -100,8 +100,52 @@
       (got ? 'matched: ' + got : '')
     );
   }
+  // --- gray zone: queries escalated to the on-device AI arbiter ---
+  // Gray means "static tiers allowed it, but ask the model". A gray verdict is
+  // NOT a block: the arbiter answers YES/NO and NO reveals the page, so
+  // false-positive-looking entries here ("lump sum tax") are fine by design.
+  const gray = (q) => T.matchGray(q, lists);
+  // [query, shouldBeGray]
+  const grayCases = [
+    // blocked queries are never gray — the arbiter is only for unproven ones
+    ['headache symptoms', false],
+    ['why does my knee hurt', false],
+    // clear allows are not gray either: no body part, no sensation
+    ['pizza near me', false],
+    ['do i have to pay taxes', false],
+    ['why does my car shake at 60mph', false],
+    ['breast stroke technique', false],
+    ['great depression causes', false],
+    // ambiguous body part + framing -> gray (tier 3 refused to call it)
+    ['why does my back keep clicking', true],
+    ['is it normal for my skin to peel', true],
+    ['why does my heart race at night', true],
+    ['why does my back button not work', true],
+    // sensation without a body part -> gray
+    ['itchy all over', true],
+    ['random bruise appeared', true],
+    ['lump sum tax', true],
+    ['bleeding edge tech', true],
+  ];
+
   lines.push('');
-  lines.push('passed ' + pass + ' / ' + cases.length + (fail ? '  ** ' + fail + ' FAILED **' : '  ALL PASS'));
+  lines.push('--- gray zone (escalated to AI arbiter, not blocked) ---');
+  for (const [q, want] of grayCases) {
+    const got = gray(q);
+    const isGray = !!got;
+    const ok = isGray === want;
+    ok ? pass++ : fail++;
+    lines.push(
+      (ok ? 'ok   ' : 'FAIL ') +
+      (isGray ? 'GRAY ' : 'clear').padEnd(6) +
+      JSON.stringify(q).padEnd(46) +
+      (got ? 'suspicion: ' + got : '')
+    );
+  }
+
+  const total = cases.length + grayCases.length;
+  lines.push('');
+  lines.push('passed ' + pass + ' / ' + total + (fail ? '  ** ' + fail + ' FAILED **' : '  ALL PASS'));
 
   // Informational: coverage knowingly given up when std / stroke / depression /
   // fatigue were removed from tier 1. These are expected to read "allow" — the

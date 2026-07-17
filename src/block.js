@@ -1,6 +1,7 @@
 // block.js — content script. Runs at document_start on every page, decides
 // whether this is a medical search or a medical site, and if so paints a
-// full-screen ASCII overlay (hard block, no bypass).
+// full-screen ASCII overlay (hard block, no bypass). Queries the static tiers
+// can't call get escalated to the on-device AI arbiter in background.js.
 
 (function () {
   const {
@@ -13,9 +14,25 @@
     SEARCH_ENGINES,
     CHARACTERS,
   } = window.DR_NO_DATA;
-  const { isBlockedSite, getSearchQuery, matchMedical } = window.DR_NO_DETECT;
+  const { isBlockedSite, getSearchQuery, matchMedical, matchGray } = window.DR_NO_DETECT;
 
   const root = document.documentElement;
+
+  // How long a gray-zone page stays hidden waiting for the arbiter before we
+  // fall back to the static verdict (allow). Warm model answers in well under
+  // a second; this bound only bites on a cold service worker + first prompt.
+  const AI_TIMEOUT_MS = 3500;
+
+  // Terms the user added themselves are Tier 1: they block on their own.
+  function buildLists(extraKeywords) {
+    return {
+      strong: MEDICAL_KEYWORDS.concat(extraKeywords || []),
+      context: CONTEXT_PHRASES,
+      bodyParts: BODY_PARTS,
+      ambiguousParts: AMBIGUOUS_PARTS,
+      sensations: SENSATIONS,
+    };
+  }
 
   // Returns a reason string if the current page matches the given lists, else null.
   function reasonFor(extraKeywords, extraSites) {
@@ -24,16 +41,29 @@
       return 'This looks like a medical site.';
     }
     const query = getSearchQuery(location.href, SEARCH_ENGINES);
-    // Terms the user added themselves are Tier 1: they block on their own.
-    const hit = matchMedical(query, {
-      strong: MEDICAL_KEYWORDS.concat(extraKeywords || []),
-      context: CONTEXT_PHRASES,
-      bodyParts: BODY_PARTS,
-      ambiguousParts: AMBIGUOUS_PARTS,
-      sensations: SENSATIONS,
-    });
+    const hit = matchMedical(query, buildLists(extraKeywords));
     if (hit) return 'That search looks medical (“' + hit + '”).';
     return null;
+  }
+
+  // Ask the background worker's on-device model about a gray-zone query.
+  // Resolves 'yes' | 'no' | 'unavailable'. Never rejects and never hangs — a
+  // missing model, dead worker, or slow answer must not brick browsing, so
+  // anything but a clear verdict falls back to 'unavailable' (= allow).
+  function askArbiter(query) {
+    return new Promise(function (resolve) {
+      const timer = setTimeout(function () { resolve('unavailable'); }, AI_TIMEOUT_MS);
+      try {
+        chrome.runtime.sendMessage({ type: 'DR_NO_CLASSIFY', query: query }, function (res) {
+          clearTimeout(timer);
+          if (chrome.runtime.lastError || !res) resolve('unavailable');
+          else resolve(res.verdict);
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        resolve('unavailable');
+      }
+    });
   }
 
   // Hide the real page immediately (used the moment a built-in match is suspected,
@@ -95,24 +125,45 @@
   }
 
   // Fast, storage-free check against built-in lists to suppress the flash.
+  // Gray-zone pages hide too: if the arbiter ends up blocking, no medical
+  // results should have flashed while it thought.
+  const pageQuery = getSearchQuery(location.href, SEARCH_ENGINES);
   const builtinMatch = reasonFor([], []);
-  if (builtinMatch) hidePage();
+  if (builtinMatch || (pageQuery && matchGray(pageQuery, buildLists([])))) hidePage();
 
   chrome.storage.sync.get(
-    { enabled: true, extraKeywords: [], extraSites: [], character: 'cat' },
+    { enabled: true, aiEnabled: true, extraKeywords: [], extraSites: [], character: 'cat' },
     function (settings) {
       if (!settings.enabled) {
         revealPage();
         return;
       }
       const reason = reasonFor(settings.extraKeywords, settings.extraSites);
-      if (!reason) {
+      if (reason) {
+        // A fixed-position overlay mounted onto <html> renders fine even before
+        // <body> exists, so we can block immediately at document_start.
+        renderOverlay(reason, settings.character);
+        return;
+      }
+
+      // Static tiers said allow. If the query is gray — suspicious but not
+      // provable from word lists — the on-device model gets the final word.
+      const gray = settings.aiEnabled && pageQuery
+        ? matchGray(pageQuery, buildLists(settings.extraKeywords))
+        : null;
+      if (!gray) {
         revealPage();
         return;
       }
-      // A fixed-position overlay mounted onto <html> renders fine even before
-      // <body> exists, so we can block immediately at document_start.
-      renderOverlay(reason, settings.character);
+
+      hidePage();
+      askArbiter(pageQuery).then(function (verdict) {
+        if (verdict === 'yes') {
+          renderOverlay('That search looks medical (“' + gray + '” — confirmed on-device).', settings.character);
+        } else {
+          revealPage();
+        }
+      });
     }
   );
 })();

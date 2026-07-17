@@ -56,6 +56,17 @@
   </section>
 
   <section>
+    <div class="toggle">
+      <input type="checkbox" id="aiEnabled" />
+      <label class="field" for="aiEnabled" style="margin:0;">On-device AI arbiter
+        <span class="hint">— borderline searches the keyword rules can't call are decided by
+        Chrome's built-in model (Gemini Nano). Runs entirely on this device; nothing is sent anywhere.</span></label>
+    </div>
+    <p class="hint" id="aiStatus" style="margin:10px 0 0 30px;"></p>
+    <button type="button" class="save" id="aiDownload" style="display:none; margin:10px 0 0 30px;">Download model</button>
+  </section>
+
+  <section>
     <label class="field" for="extraKeywords">Extra blocked terms
       <span class="hint">— one per line, added to the built-in list.</span></label>
     <textarea id="extraKeywords" placeholder="sniffle&#10;webmd&#10;my knee hurts"></textarea>

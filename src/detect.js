@@ -96,6 +96,35 @@ function matchMedical(query, lists) {
   return null;
 }
 
+// Decide whether a query that matchMedical allowed is still suspicious enough
+// to ask the on-device AI arbiter (the "gray zone"). Two shapes qualify:
+//
+//   - a sensation with no body part           -> "itchy all over"
+//   - a body part plus a question framing
+//     that tier 3 rejected as ambiguous       -> "why does my back keep clicking"
+//
+// These are exactly the queries the static tiers deliberately let through to
+// avoid false positives ("lump sum tax", "why does my back button not work") —
+// a model can tell those apart where word lists cannot. Returns a short
+// description of the suspicion for the block message, else null. A query that
+// matchMedical already blocks is never gray.
+function matchGray(query, lists) {
+  if (matchMedical(query, lists)) return null;
+  const q = normalizeQuery(query);
+  if (!q) return null;
+
+  const part = findTerm(q, lists.bodyParts);
+  const sensation = findTerm(q, lists.sensations);
+  if (sensation && !part) return sensation;
+
+  if (part) {
+    const context = findTerm(q, lists.context);
+    if (context) return context + ' ' + part;
+  }
+
+  return null;
+}
+
 // Expose for pages / tests.
 if (typeof window !== 'undefined') {
   window.DR_NO_DETECT = {
@@ -104,5 +133,6 @@ if (typeof window !== 'undefined') {
     normalizeQuery,
     findTerm,
     matchMedical,
+    matchGray,
   };
 }
