@@ -150,22 +150,33 @@
 
       // Static tiers said allow. If the query is gray — suspicious but not
       // provable from word lists — the on-device model gets the final word.
-      const gray = settings.aiEnabled && pageQuery
-        ? matchGray(pageQuery, buildLists(settings.extraKeywords))
-        : null;
+      const gray = pageQuery ? matchGray(pageQuery, buildLists(settings.extraKeywords)) : null;
       if (!gray) {
         revealPage();
         return;
       }
 
-      hidePage();
-      askArbiter(pageQuery).then(function (verdict) {
+      // Resolve a gray query from the arbiter's verdict. 'unavailable' applies
+      // the shape's fallback, so with no working model (or the arbiter turned
+      // off) behavior is exactly the pre-AI static behavior: demoted keywords
+      // still block, mere suspicions still load.
+      function settleGray(verdict) {
         if (verdict === 'yes') {
-          renderOverlay('That search looks medical (“' + gray + '” — confirmed on-device).', settings.character);
+          renderOverlay('That search looks medical (“' + gray.reason + '” — confirmed on-device).', settings.character);
+        } else if (verdict === 'unavailable' && gray.fallback === 'block') {
+          renderOverlay('That search looks medical (“' + gray.reason + '”).', settings.character);
         } else {
           revealPage();
         }
-      });
+      }
+
+      if (!settings.aiEnabled) {
+        settleGray('unavailable');
+        return;
+      }
+
+      hidePage();
+      askArbiter(pageQuery).then(settleGray);
     }
   );
 })();

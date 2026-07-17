@@ -37,9 +37,10 @@ const MEDICAL_KEYWORDS = [
 ];
 
 // Medical-leaning phrases with a real non-medical life: "side effects of old
-// fuel on engine", "side effects of the new update". Too risky to hard-block
-// alone, too medical to ignore — so they escalate to the on-device AI arbiter
-// (gray zone) and block only if it says the query is medical. findTerm's
+// fuel on engine", "side effects of the new update". The on-device AI arbiter
+// may clear their non-medical uses, but without a working arbiter they block
+// exactly like the tier 1 keywords they used to be (fallback 'block' in
+// matchGray) — demoting them never weakens the no-AI behavior. findTerm's
 // simple-plural rule means 'side effect' covers "side effects" too.
 const AMBIGUOUS_KEYWORDS = ['side effect'];
 

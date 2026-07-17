@@ -105,27 +105,32 @@ function matchMedical(query, lists) {
 //   - a body part plus a question framing
 //     that tier 3 rejected as ambiguous        -> "why does my back keep clicking"
 //
-// These are exactly the queries the static tiers deliberately let through to
-// avoid false positives ("side effects of old fuel on engine", "lump sum tax",
-// "why does my back button not work") — a model can tell those apart where
-// word lists cannot. Returns a short description of the suspicion for the
-// block message, else null. A query that matchMedical already blocks is never
-// gray.
+// Returns { reason, fallback } for a gray query, else null. `fallback` is the
+// verdict to apply when no arbiter is available, and it preserves the exact
+// pre-AI static behavior for each shape:
+//
+//   - 'block': ambiguousKeywords used to be tier 1 hard blocks. The model may
+//     clear their non-medical uses ("side effects of old fuel on engine"),
+//     but without a model they block exactly as they always did.
+//   - 'allow': the other two shapes were always statically allowed. The model
+//     may add blocks for them, but without a model nothing changes.
+//
+// A query that matchMedical already blocks is never gray.
 function matchGray(query, lists) {
   if (matchMedical(query, lists)) return null;
   const q = normalizeQuery(query);
   if (!q) return null;
 
   const keyword = findTerm(q, lists.ambiguousKeywords || []);
-  if (keyword) return keyword;
+  if (keyword) return { reason: keyword, fallback: 'block' };
 
   const part = findTerm(q, lists.bodyParts);
   const sensation = findTerm(q, lists.sensations);
-  if (sensation && !part) return sensation;
+  if (sensation && !part) return { reason: sensation, fallback: 'allow' };
 
   if (part) {
     const context = findTerm(q, lists.context);
-    if (context) return context + ' ' + part;
+    if (context) return { reason: context + ' ' + part, fallback: 'allow' };
   }
 
   return null;

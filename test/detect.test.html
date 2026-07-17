@@ -111,11 +111,12 @@
     );
   }
   // --- gray zone: queries escalated to the on-device AI arbiter ---
-  // Gray means "static tiers allowed it, but ask the model". A gray verdict is
-  // NOT a block: the arbiter answers YES/NO and NO reveals the page, so
-  // false-positive-looking entries here ("lump sum tax") are fine by design.
+  // Gray means "static tiers can't call it, ask the model". The fallback is
+  // what happens with no working arbiter, and must equal the pre-AI static
+  // behavior: 'allow' for mere suspicions (always loaded), 'block' for
+  // demoted ex-tier-1 keywords (always blocked).
   const gray = (q) => T.matchGray(q, lists);
-  // [query, shouldBeGray]
+  // [query, shouldBeGray, expected fallback]
   const grayCases = [
     // blocked queries are never gray — the arbiter is only for unproven ones
     ['headache symptoms', false],
@@ -127,33 +128,34 @@
     ['breast stroke technique', false],
     ['great depression causes', false],
     // ambiguous body part + framing -> gray (tier 3 refused to call it)
-    ['why does my back keep clicking', true],
-    ['is it normal for my skin to peel', true],
-    ['why does my heart race at night', true],
-    ['why does my back button not work', true],
+    ['why does my back keep clicking', true, 'allow'],
+    ['is it normal for my skin to peel', true, 'allow'],
+    ['why does my heart race at night', true, 'allow'],
+    ['why does my back button not work', true, 'allow'],
     // sensation without a body part -> gray
-    ['itchy all over', true],
-    ['random bruise appeared', true],
-    ['lump sum tax', true],
-    ['bleeding edge tech', true],
-    // ambiguous keyword -> gray (AI decides; engine fuel expected NO there)
-    ['side effects of old fuel on engine', true],
-    ['birth control side effects', true],
-    ['lisinopril side effects', true],
+    ['itchy all over', true, 'allow'],
+    ['random bruise appeared', true, 'allow'],
+    ['lump sum tax', true, 'allow'],
+    ['bleeding edge tech', true, 'allow'],
+    // ambiguous keyword -> gray, but blocks like old tier 1 when AI is absent
+    ['side effects of old fuel on engine', true, 'block'],
+    ['birth control side effects', true, 'block'],
+    ['lisinopril side effects', true, 'block'],
   ];
 
   lines.push('');
-  lines.push('--- gray zone (escalated to AI arbiter, not blocked) ---');
-  for (const [q, want] of grayCases) {
+  lines.push('--- gray zone (escalated to AI arbiter; fallback = no-AI behavior) ---');
+  for (const [q, want, wantFallback] of grayCases) {
     const got = gray(q);
     const isGray = !!got;
-    const ok = isGray === want;
+    let ok = isGray === want;
+    if (ok && isGray) ok = got.fallback === wantFallback;
     ok ? pass++ : fail++;
     lines.push(
       (ok ? 'ok   ' : 'FAIL ') +
       (isGray ? 'GRAY ' : 'clear').padEnd(6) +
       JSON.stringify(q).padEnd(46) +
-      (got ? 'suspicion: ' + got : '')
+      (got ? 'suspicion: ' + got.reason + '  fallback: ' + got.fallback : '')
     );
   }
 

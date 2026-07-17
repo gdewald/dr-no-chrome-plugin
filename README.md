@@ -46,19 +46,21 @@ Word lists can't call everything. Three query shapes are suspicious but unprovab
   "side effects") — "birth control side effects" vs "side effects of old fuel
   on engine"
 
-The static tiers deliberately allow all of these (false positives are worse than
-misses for a hard-block tool). With the AI arbiter enabled, such queries are instead
-escalated to **Chrome's built-in on-device model (Gemini Nano, via the Prompt API)**,
-which answers medical-or-not per query. YES blocks; NO (or any failure) falls back to
-the static verdict and the page loads.
+Such queries are escalated to **Chrome's built-in on-device model (Gemini Nano, via
+the Prompt API)**, which answers medical-or-not per query. YES blocks, NO loads the
+page. Each shape also carries a **no-AI fallback** that preserves the static
+behavior from before the arbiter existed: the two suspicion shapes fall back to
+*allow* (the tiers always let them through), while `AMBIGUOUS_KEYWORDS` fall back to
+*block* (they used to be tier 1 — the model can rescue "side effects of old fuel on
+engine", but without a model it blocks exactly as it always did).
 
 Properties:
 
 - **Fully on-device and offline.** The model ships with Chrome's built-in AI; the
   extension makes zero network requests. Nothing about your searches leaves the machine.
-- **Fail-open.** No model, unsupported Chrome, slow answer (>3.5s), dead service
-  worker — all fall back to exactly the old static behavior. The arbiter can only
-  ever add blocks for gray queries, never remove static ones.
+- **No AI, no change.** Unsupported Chrome, model not installed, slow answer
+  (>3.5s), dead service worker, or the arbiter toggled off — every path resolves
+  to each shape's fallback, which is exactly the pre-AI static behavior.
 - **Cached.** Verdicts are cached per normalized query (`chrome.storage.session`),
   so a repeated search never waits on the model twice.
 - **Requirements:** Chrome 138+, and the built-in model available on the device
@@ -129,8 +131,10 @@ icons/               toolbar icons (16/48/128)
    for `why does my back keep clicking` → brief pause, then overlay with "confirmed
    on-device"; search `lump sum tax` → brief pause on first run, then loads normally,
    and instantly on a repeat (cached verdict).
-7. **AI fail-open** — on a Chrome without the model, both searches above load normally
-   after at most ~3.5s.
+7. **No-AI fallback** — on a Chrome without the model (or with the arbiter toggled
+   off), `why does my back keep clicking` loads normally after at most ~3.5s, and
+   `side effects of old fuel on engine` shows the overlay — identical to the
+   pre-AI static behavior in both directions.
 
 ## Known limitations
 
@@ -138,9 +142,11 @@ icons/               toolbar icons (16/48/128)
   nudge tool; could be hardened later with `declarativeNetRequest`.
 - Blocking is evaluated at page load. Search engines that update results via in-page
   navigation without a full reload won't be re-checked until the next load.
-- The AI arbiter only ever escalates (gray → block). It deliberately cannot veto a
-  static match: a wrong "not medical" from a small model would silently punch a hole
-  in the hard block, and the static tiers are already tuned to near-zero false
-  positives. Loosen a list instead if a static rule annoys you.
+- The AI arbiter cannot veto a `MEDICAL_KEYWORDS` / tier 2 / tier 3 match: a wrong
+  "not medical" from a small model would silently punch a hole in the hard block,
+  and the static tiers are already tuned to near-zero false positives. The one
+  place it may clear a query is `AMBIGUOUS_KEYWORDS` — terms demoted out of tier 1
+  precisely so the model can rescue their non-medical uses, and which block
+  exactly as before whenever the model is absent.
 - Gemini Nano availability is Chrome's call (version + hardware gates). Everything
   degrades to pure static matching when it's absent.
