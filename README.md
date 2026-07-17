@@ -63,6 +63,13 @@ Properties:
   to each shape's fallback, which is exactly the pre-AI static behavior.
 - **Cached.** Verdicts are cached per normalized query (`chrome.storage.session`),
   so a repeated search never waits on the model twice.
+- **Warmed up.** The worker loads the model at browser startup and when the options
+  page sees it become available, so the first real query doesn't pay the cold-start
+  cost (a cold first prompt can exceed the 3.5s budget and fall back).
+- **Testable.** The options page has a "Test the arbiter" box that runs any query
+  through the exact same path a real search uses and reports the verdict, the
+  latency, whether it was cached, and any error — use it when a search didn't do
+  what you expected.
 - **Requirements:** Chrome 138+, and the built-in model available on the device
   (Chrome gates it on hardware — roughly a few GB of free disk and a capable
   GPU/CPU). The options page shows live model status, a download button if the

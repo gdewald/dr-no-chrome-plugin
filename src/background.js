@@ -88,24 +88,30 @@ async function cachePut(key, verdict) {
   await chrome.storage.session.set({ [CACHE_KEY]: map });
 }
 
-// Classify one query. Resolves 'yes' | 'no'; throws if the model can't run
-// (caller maps that to 'unavailable').
+// Classify one query. Resolves { verdict: 'yes'|'no', ms, source }; throws if
+// the model can't run (the message handler maps that to 'unavailable' plus the
+// error text, for the options page's diagnostics).
 async function classify(query) {
   const key = String(query || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  if (!key) return 'no';
+  if (!key) return { verdict: 'no', ms: 0, source: 'empty' };
 
+  const started = Date.now();
   const cached = await cacheGet(key);
-  if (cached) return cached;
+  if (cached) return { verdict: cached, ms: Date.now() - started, source: 'cache' };
 
   const base = await getSession();
   // Prompt against a clone so the shared session's context never accumulates
-  // past queries (a session remembers its whole conversation).
-  const session = base.clone ? await base.clone() : base;
+  // past queries (a session remembers its whole conversation). Clone failure
+  // isn't fatal — fall back to prompting the base session directly.
+  let session = base;
+  if (base.clone) {
+    try { session = await base.clone(); } catch (e) { session = base; }
+  }
   try {
     const out = await session.prompt(key);
     const verdict = /^\s*yes/i.test(out) ? 'yes' : 'no';
     await cachePut(key, verdict);
-    return verdict;
+    return { verdict, ms: Date.now() - started, source: 'model' };
   } finally {
     if (session !== base && session.destroy) session.destroy();
   }
@@ -117,18 +123,31 @@ async function aiStatus() {
   return api.availability(); // 'unavailable' | 'downloadable' | 'downloading' | 'available'
 }
 
+// Load the model into memory before the first real query needs it: a cold
+// first prompt (fresh browser start, or right after the model download) can
+// blow the content script's answer budget and silently fall back. Fire and
+// forget — failure just means the first query pays the cold-start cost.
+function warmup() {
+  getSession().catch(() => {});
+}
+chrome.runtime.onStartup.addListener(warmup);
+chrome.runtime.onInstalled.addListener(warmup);
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
   if (msg.type === 'DR_NO_CLASSIFY') {
     classify(msg.query).then(
-      (verdict) => sendResponse({ verdict }),
-      () => sendResponse({ verdict: 'unavailable' })
+      (r) => sendResponse({ verdict: r.verdict, ms: r.ms, source: r.source }),
+      (err) => sendResponse({ verdict: 'unavailable', error: String((err && err.message) || err) })
     );
     return true; // keep the channel open for the async response
   }
   if (msg.type === 'DR_NO_AI_STATUS') {
     aiStatus().then(
-      (status) => sendResponse({ status }),
+      (status) => {
+        if (status === 'available') warmup(); // options page is polling; get ready
+        sendResponse({ status });
+      },
       () => sendResponse({ status: 'unsupported' })
     );
     return true;

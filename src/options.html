@@ -71,6 +71,18 @@
       <div class="bar" id="aiBar"><div class="fill" id="aiFill"></div></div>
     </div>
     <button type="button" class="save" id="aiDownload" style="display:none; margin:10px 0 0 30px;">Download model</button>
+    <div style="margin:14px 0 0 30px;">
+      <label class="field" for="aiTestQuery">Test the arbiter
+        <span class="hint">— runs a query through the exact same path a real search uses,
+        so you can see the verdict, the latency, and any error.</span></label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="aiTestQuery" value="why does my back keep clicking"
+          style="flex:1; background:#1e293b; color:#e2e8f0; border:1px solid #334155;
+          border-radius:10px; padding:10px 12px; font:14px/1.4 Consolas, monospace;" />
+        <button type="button" class="save" id="aiTest">Ask</button>
+      </div>
+      <p class="hint" id="aiTestResult" style="margin:8px 0 0;"></p>
+    </div>
   </section>
 
   <section>

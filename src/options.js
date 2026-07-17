@@ -23,6 +23,9 @@
     aiBar: document.getElementById('aiBar'),
     aiFill: document.getElementById('aiFill'),
     aiDownload: document.getElementById('aiDownload'),
+    aiTestQuery: document.getElementById('aiTestQuery'),
+    aiTest: document.getElementById('aiTest'),
+    aiTestResult: document.getElementById('aiTestResult'),
     extraKeywords: document.getElementById('extraKeywords'),
     extraSites: document.getElementById('extraSites'),
     chars: document.getElementById('chars'),
@@ -116,7 +119,50 @@
     if (state === paintedState) return;
     paintedState = state;
     paintAiStatus(state);
+    if (state === 'available') {
+      // Wake the background worker so it loads the model into memory now,
+      // not on the first real search (a cold first prompt can be slow enough
+      // to blow the content script's 3.5s budget and silently fall back).
+      try {
+        chrome.runtime.sendMessage({ type: 'DR_NO_AI_STATUS' }, () => chrome.runtime.lastError);
+      } catch (e) { /* worker missing — the test button will say so */ }
+    }
   }
+
+  // "Test the arbiter": send the query down the real classification path
+  // (message -> background worker -> model) and report verdict, latency, and
+  // any error. Deliberately no timeout — unlike a real search, the point here
+  // is to see how long the answer actually takes.
+  els.aiTest.addEventListener('click', () => {
+    const q = els.aiTestQuery.value.trim();
+    if (!q) return;
+    els.aiTest.disabled = true;
+    els.aiTestResult.textContent = 'Asking… (a cold model can take several seconds)';
+    const started = Date.now();
+    chrome.runtime.sendMessage({ type: 'DR_NO_CLASSIFY', query: q }, (res) => {
+      els.aiTest.disabled = false;
+      const ms = Date.now() - started;
+      if (chrome.runtime.lastError || !res) {
+        els.aiTestResult.textContent =
+          '✗ No answer from the background worker' +
+          (chrome.runtime.lastError ? ' (' + chrome.runtime.lastError.message + ')' : '') +
+          '. Try reloading the extension on chrome://extensions.';
+        return;
+      }
+      if (res.verdict === 'unavailable') {
+        els.aiTestResult.textContent =
+          '✗ Arbiter unavailable after ' + ms + 'ms' + (res.error ? ' — ' + res.error : '') +
+          '. Gray searches fall back to keyword-only behavior.';
+        return;
+      }
+      els.aiTestResult.textContent =
+        (res.verdict === 'yes' ? '🚫 YES — this search would be blocked' : '✓ NO — this search would be allowed') +
+        ' (' + res.ms + 'ms, ' + (res.source === 'cache' ? 'cached verdict' : 'model') + ')' +
+        (res.source === 'model' && res.ms > 3500
+          ? '. Slower than the 3.5s search budget — a real search would have fallen back this time; now that the model is warm, try again.'
+          : '.');
+    });
+  });
 
   els.aiDownload.addEventListener('click', async () => {
     // Paint before anything async: availability() can keep reporting
