@@ -79,9 +79,9 @@ const CHARACTERS = {
     name: 'Shrugging bear',
     art: String.raw`
    ( )_( )
-  ='(o.o)'=   ¯\_(ツ)_/¯
-   (  :  )     step away from the symptoms
-  (__(")(")__)
+   ( o.o )
+  \(  :  )/   step away from the symptoms
+   (_)  (_)
 `,
   },
   robot: {
