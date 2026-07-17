@@ -82,12 +82,25 @@
   let paintedState = null;
 
   async function aiAvailability() {
-    if (typeof LanguageModel === 'undefined') return 'unsupported';
-    try {
-      return await LanguageModel.availability();
-    } catch (e) {
-      return 'unavailable';
+    // Chrome: the Prompt API is exposed to this page directly.
+    if (typeof LanguageModel !== 'undefined') {
+      try {
+        return await LanguageModel.availability();
+      } catch (e) {
+        return 'unavailable';
+      }
     }
+    // Not Chrome: ask the worker, which knows about the Firefox AI Runtime.
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'DR_NO_AI_STATUS' }, (res) => {
+          if (chrome.runtime.lastError || !res) resolve('unsupported');
+          else resolve(res.status);
+        });
+      } catch (e) {
+        resolve('unsupported');
+      }
+    });
   }
 
   function showProgressBar(pct) {
@@ -110,7 +123,10 @@
       : state === 'downloading' ? 'Downloading model… It’s a few GB, so this can take several minutes. ' +
         'Chrome keeps downloading even if you close this page.'
       : state === 'downloadable' ? 'Model not downloaded yet. Until then only the keyword rules apply.'
-      : state === 'unsupported' ? 'Not supported by this Chrome (needs Chrome 138+ with built-in AI). Keyword rules still work.'
+      : state === 'trial-ml' ? 'Firefox AI Runtime detected (experimental). The arbiter downloads its model ' +
+        '(~70MB) the first time it is asked — use “Test the arbiter” below to trigger and check it.'
+      : state === 'unsupported' ? 'No on-device AI in this browser (needs Chrome 138+, or Firefox 134+ with ' +
+        'extensions.ml.enabled). Keyword rules still work.'
       : 'Model unavailable on this device (hardware requirements not met). Keyword rules still work.';
   }
 

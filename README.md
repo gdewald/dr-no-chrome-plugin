@@ -95,6 +95,31 @@ after editing any list in `src/data.js`.
 
 The Dr. No icon appears in the toolbar.
 
+## Firefox (experimental scaffold — untested)
+
+Firefox has no Prompt API; the closest analog is the **Firefox AI Runtime**
+(`browser.trial.ml`, Firefox ~134+, experimental). The worker picks its backend at
+runtime, so the same code runs in both browsers: on Firefox the arbiter uses
+zero-shot NLI classification (`Xenova/nli-deberta-v3-xsmall`, ~70MB, downloaded by
+Firefox on first use) instead of a generative model — same message contract, same
+cache, same fallbacks.
+
+To try it:
+
+1. In `about:config`, set `extensions.ml.enabled` to `true`.
+2. Swap in the Firefox manifest (Chrome rejects the `trialML` permission, Firefox
+   needs `background.scripts` + a gecko id, hence two manifests):
+   `cp manifest.firefox.json manifest.json` — restore with `git checkout manifest.json`.
+3. `about:debugging` → This Firefox → **Load Temporary Add-on** → pick `manifest.json`.
+4. Grant host access (Firefox MV3 host permissions are opt-in), then open the
+   options page and use **Test the arbiter** — the first ask triggers the model
+   download.
+
+Caveats: the `trial.ml` path has not been exercised against a live Firefox AI
+Runtime; the zero-shot labels and the 0.5 threshold in `src/background.js` need
+validating against the gray-zone twins before trusting verdicts. Chrome behavior is
+untouched by any of this.
+
 ## Configure
 
 - **Popup** (click the toolbar icon): quick on/off switch.
@@ -114,15 +139,17 @@ sent to the background service worker (`src/background.js`), which prompts the
 on-device model and returns a verdict. No build step, no dependencies.
 
 ```
-manifest.json        MV3 manifest
-src/data.js          keyword list, domain list, search engines, ASCII characters
-src/detect.js        pure detection helpers (site / query / keyword / gray matching)
-src/block.js         content script — detect + escalate gray queries + render overlay
-src/background.js    service worker — on-device AI arbiter (Prompt API / Gemini Nano)
-src/block.css        overlay styling
-src/options.html/js  options page (incl. AI arbiter status + model download)
-src/popup.html/js    toolbar popup (on/off)
-icons/               toolbar icons (16/48/128)
+manifest.json          MV3 manifest (Chrome)
+manifest.firefox.json  MV3 manifest (Firefox — trialML permission, event page, gecko id)
+src/data.js            keyword list, domain list, search engines, ASCII characters
+src/detect.js          pure detection helpers (site / query / keyword / gray matching)
+src/block.js           content script — detect + escalate gray queries + render overlay
+src/background.js      background worker — AI arbiter (Chrome: Prompt API / Gemini Nano;
+                       Firefox: trial.ml zero-shot, experimental)
+src/block.css          overlay styling
+src/options.html/js    options page (incl. AI arbiter status + model download)
+src/popup.html/js      toolbar popup (on/off)
+icons/                 toolbar icons (16/48/128)
 ```
 
 ## Manual test checklist
