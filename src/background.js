@@ -7,9 +7,11 @@
 //   - Chrome:  the built-in model (Gemini Nano) via the Prompt API
 //     (LanguageModel global, Chrome 138+). Generative session, few-shot,
 //     YES/NO parsing.
-//   - Firefox: the AI Runtime via browser.trial.ml (Firefox ~134+,
-//     experimental, "trialML" permission, needs extensions.ml.enabled in
-//     about:config). Zero-shot classification — no prompt parsing at all.
+//   - Firefox: the AI Runtime via browser.trial.ml (Firefox 134+,
+//     experimental). Needs the optional "trialML" permission — granted from
+//     the options page, since trial permissions can't be install-time — and
+//     the browser.ml.enable + extensions.ml.enabled prefs (default-on in
+//     Nightly). Zero-shot classification — no prompt parsing at all.
 //
 // Everything is on-device for both. This file makes no network requests
 // itself (each browser downloads and caches its own model); if no backend is

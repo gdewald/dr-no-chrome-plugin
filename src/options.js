@@ -23,6 +23,7 @@
     aiBar: document.getElementById('aiBar'),
     aiFill: document.getElementById('aiFill'),
     aiDownload: document.getElementById('aiDownload'),
+    aiGrant: document.getElementById('aiGrant'),
     aiTestQuery: document.getElementById('aiTestQuery'),
     aiTest: document.getElementById('aiTest'),
     aiTestResult: document.getElementById('aiTestResult'),
@@ -90,6 +91,15 @@
         return 'unavailable';
       }
     }
+    // Firefox: trialML is an *optional* permission — until it's granted the
+    // trial.ml namespace doesn't exist in any context, so check the grant
+    // before asking the worker (which would just say 'unsupported').
+    if (typeof browser !== 'undefined' && browser.permissions) {
+      try {
+        const granted = await browser.permissions.contains({ permissions: ['trialML'] });
+        if (!granted) return 'needs-permission';
+      } catch (e) { /* permission name unknown here — fall through to the worker */ }
+    }
     // Not Chrome: ask the worker, which knows about the Firefox AI Runtime.
     return new Promise((resolve) => {
       try {
@@ -116,6 +126,7 @@
 
   function paintAiStatus(state) {
     els.aiDownload.style.display = state === 'downloadable' ? 'inline-block' : 'none';
+    els.aiGrant.style.display = state === 'needs-permission' ? 'inline-block' : 'none';
     if (state === 'downloading') showProgressBar(null);
     else els.aiProgress.style.display = 'none';
     els.aiStatus.textContent =
@@ -123,10 +134,12 @@
       : state === 'downloading' ? 'Downloading model… It’s a few GB, so this can take several minutes. ' +
         'Chrome keeps downloading even if you close this page.'
       : state === 'downloadable' ? 'Model not downloaded yet. Until then only the keyword rules apply.'
+      : state === 'needs-permission' ? 'Firefox can run the arbiter on-device, but needs your permission to ' +
+        'use its AI runtime first. Until then only the keyword rules apply.'
       : state === 'trial-ml' ? 'Firefox AI Runtime detected (experimental). The arbiter downloads its model ' +
         '(~70MB) the first time it is asked — use “Test the arbiter” below to trigger and check it.'
       : state === 'unsupported' ? 'No on-device AI in this browser (needs Chrome 138+, or Firefox 134+ with ' +
-        'extensions.ml.enabled). Keyword rules still work.'
+        'browser.ml.enable and extensions.ml.enabled set in about:config). Keyword rules still work.'
       : 'Model unavailable on this device (hardware requirements not met). Keyword rules still work.';
   }
 
@@ -178,6 +191,23 @@
           ? '. Slower than the 3.5s search budget — a real search would have fallen back this time; now that the model is warm, try again.'
           : '.');
     });
+  });
+
+  // Firefox: trialML is an optional permission, and permissions.request() must
+  // run inside a user gesture — so the grant lives on a button, exactly like
+  // the Chrome model download does.
+  els.aiGrant.addEventListener('click', async () => {
+    try {
+      const granted = await browser.permissions.request({ permissions: ['trialML'] });
+      paintedState = null; // repaint from real state either way
+      if (granted) {
+        els.aiTestResult.textContent =
+          'Permission granted — use “Test the arbiter” to trigger the model download (~70MB).';
+      }
+      aiTick();
+    } catch (e) {
+      els.aiStatus.textContent = 'Permission request failed: ' + e.message;
+    }
   });
 
   els.aiDownload.addEventListener('click', async () => {

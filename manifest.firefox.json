@@ -3,7 +3,8 @@
   "name": "Dr. No — Medical Search Blocker",
   "version": "1.1.0",
   "description": "Stops you from googling your symptoms or spiraling on WebMD — with a friendly little ASCII friend.",
-  "permissions": ["storage", "trialML"],
+  "permissions": ["storage"],
+  "optional_permissions": ["trialML"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["src/background.js"]

@@ -106,14 +106,26 @@ cache, same fallbacks.
 
 To try it:
 
-1. In `about:config`, set `extensions.ml.enabled` to `true`.
-2. Swap in the Firefox manifest (Chrome rejects the `trialML` permission, Firefox
-   needs `background.scripts` + a gecko id, hence two manifests):
+1. In `about:config`, make sure `browser.ml.enable` **and** `extensions.ml.enabled`
+   are `true` (both default on in Nightly; Beta/Release need them flipped).
+2. Swap in the Firefox manifest (Firefox needs `background.scripts` + a gecko id
+   and the optional `trialML` permission Chrome doesn't know, hence two manifests):
    `cp manifest.firefox.json manifest.json` — restore with `git checkout manifest.json`.
 3. `about:debugging` → This Firefox → **Load Temporary Add-on** → pick `manifest.json`.
 4. Grant host access (Firefox MV3 host permissions are opt-in), then open the
-   options page and use **Test the arbiter** — the first ask triggers the model
-   download.
+   options page and click **Enable on-device AI** — `trialML` is a *trial*
+   permission, which can only be granted at runtime, so until this button is
+   clicked `browser.trial.ml` doesn't exist and the arbiter reports itself
+   unavailable.
+5. Use **Test the arbiter** — the first ask triggers the model download.
+
+Or let [web-ext](https://extensionworkshop.com/documentation/develop/getting-started-with-web-ext/)
+handle the manifest-swapped checkout for you:
+
+```
+npx web-ext run --firefox <path-to-nightly> \
+  --pref browser.ml.enable=true --pref extensions.ml.enabled=true
+```
 
 Caveats: the `trial.ml` path has not been exercised against a live Firefox AI
 Runtime; the zero-shot labels and the 0.5 threshold in `src/background.js` need
@@ -140,7 +152,7 @@ on-device model and returns a verdict. No build step, no dependencies.
 
 ```
 manifest.json          MV3 manifest (Chrome)
-manifest.firefox.json  MV3 manifest (Firefox — trialML permission, event page, gecko id)
+manifest.firefox.json  MV3 manifest (Firefox — optional trialML permission, event page, gecko id)
 src/data.js            keyword list, domain list, search engines, ASCII characters
 src/detect.js          pure detection helpers (site / query / keyword / gray matching)
 src/block.js           content script — detect + escalate gray queries + render overlay
