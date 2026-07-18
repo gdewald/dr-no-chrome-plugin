@@ -2,13 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dr. No</title>
   <style>
     :root { color-scheme: dark; }
     body {
-      margin: 0; width: 260px; padding: 16px;
+      margin: 0; width: 260px; padding: 16px; box-sizing: border-box;
       background: #0f172a; color: #e2e8f0;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    /* Firefox for Android opens the popup as a full-width panel, not a
+       toolbar dropdown sized to the body — let it fill the screen there.
+       pointer:coarse keeps desktop (which sizes the popup FROM the body
+       width, so 100% would collapse it) on the fixed 260px. */
+    @media (pointer: coarse) {
+      body { width: 100%; }
+      .slider::before { height: 24px; width: 24px; }
+      .switch { width: 54px; height: 30px; }
+      input:checked + .slider::before { transform: translateX(24px); }
+      a.options { padding: 12px; }
     }
     h1 { margin: 0 0 2px; font-size: 16px; color: #f8fafc; }
     p.sub { margin: 0 0 14px; font-size: 12px; color: #94a3b8; }
