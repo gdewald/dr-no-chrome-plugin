@@ -132,6 +132,15 @@ Runtime; the zero-shot labels and the 0.5 threshold in `src/background.js` need
 validating against the gray-zone twins before trusting verdicts. Chrome behavior is
 untouched by any of this.
 
+### Firefox for Android + LiteRT (prototype)
+
+This branch adds a third arbiter backend — a Gemma model run by the
+[LiteRT](https://github.com/google-ai-edge/litert) WASM runtime, vendored into the
+extension — so the arbiter can work on **Firefox for Android**, where `trial.ml`
+doesn't exist. Vendor the runtime with `sh tools/fetch-litert-runtime.sh`, then
+download the model from the options page. Detailed notes, install recipes, and the
+test matrix live in [docs/litert-mobile-prototype/](docs/litert-mobile-prototype/README.md).
+
 ## Configure
 
 - **Popup** (click the toolbar icon): quick on/off switch.
@@ -158,6 +167,10 @@ src/detect.js          pure detection helpers (site / query / keyword / gray mat
 src/block.js           content script — detect + escalate gray queries + render overlay
 src/background.js      background worker — AI arbiter (Chrome: Prompt API / Gemini Nano;
                        Firefox: trial.ml zero-shot, experimental)
+src/arbiter-litert.js  LiteRT arbiter backend (prototype — Gemma via vendored WASM
+                       runtime; the Firefox-for-Android path)
+tools/fetch-litert-runtime.sh  vendors the LiteRT web runtime into src/vendor/ (gitignored)
+docs/litert-mobile-prototype/  detailed prototype notes (architecture, models, Android, testing)
 src/block.css          overlay styling
 src/options.html/js    options page (incl. AI arbiter status + model download)
 src/popup.html/js      toolbar popup (on/off)
