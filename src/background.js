@@ -3,7 +3,7 @@
 // static tiers found suspicious but couldn't call (the "gray zone" — see
 // matchGray in detect.js).
 //
-// Two backends, picked at runtime:
+// Three backends, tried in order at runtime:
 //   - Chrome:  the built-in model (Gemini Nano) via the Prompt API
 //     (LanguageModel global, Chrome 138+). Generative session, few-shot,
 //     YES/NO parsing.
@@ -12,6 +12,11 @@
 //     the options page, since trial permissions can't be install-time — and
 //     the browser.ml.enable + extensions.ml.enabled prefs (default-on in
 //     Nightly). Zero-shot classification — no prompt parsing at all.
+//   - LiteRT (PROTOTYPE): a Gemma model run by the LiteRT WASM runtime,
+//     vendored into the extension — see arbiter-litert.js. The only backend
+//     that can exist on Firefox for Android, where trial.ml is absent. Needs
+//     the runtime vendored at build time and the model downloaded from the
+//     options page. Generative, same few-shot as Chrome, YES/NO parsing.
 //
 // Everything is on-device for both. This file makes no network requests
 // itself (each browser downloads and caches its own model); if no backend is
@@ -163,6 +168,17 @@ async function classifyFirefox(key) {
   return medical ? 'yes' : 'no';
 }
 
+// --------------------------------------------------------------- LiteRT ----
+//
+// PROTOTYPE — the heavy lifting lives in arbiter-litert.js, loaded before
+// this file in background.scripts (Firefox manifest only; the Chrome MV3
+// service worker can't host it — no dynamic import() in a classic SW, so a
+// Chrome port would need an offscreen document).
+
+function litertApi() {
+  return typeof DR_NO_LITERT !== 'undefined' ? DR_NO_LITERT : null;
+}
+
 // ---------------------------------------------------------------- shared ----
 
 const CACHE_KEY = 'aiVerdicts';
@@ -196,10 +212,27 @@ async function classify(query) {
   const cached = await cacheGet(key);
   if (cached) return { verdict: cached, ms: Date.now() - started, source: 'cache' };
 
-  let verdict;
-  if (chromePromptApi()) verdict = await classifyChrome(key);
-  else if (firefoxMlApi()) verdict = await classifyFirefox(key);
-  else throw new Error('no on-device AI backend in this browser');
+  // Backends in preference order, with fallthrough: a backend that *exists*
+  // can still fail at call time (trial.ml present but its engine unavailable —
+  // the expected shape on Firefox Android — or a LiteRT model not yet
+  // downloaded), and the next one deserves a shot before we give up.
+  const backends = [];
+  if (chromePromptApi()) backends.push(classifyChrome);
+  if (firefoxMlApi()) backends.push(classifyFirefox);
+  if (litertApi()) backends.push((k) => litertApi().classify(k, SYSTEM_PROMPT, FEW_SHOT));
+  if (!backends.length) throw new Error('no on-device AI backend in this browser');
+
+  let verdict = null;
+  let lastErr = null;
+  for (const run of backends) {
+    try {
+      verdict = await run(key);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (verdict === null) throw lastErr;
 
   await cachePut(key, verdict);
   return { verdict, ms: Date.now() - started, source: 'model' };
@@ -209,6 +242,11 @@ async function aiStatus() {
   const api = chromePromptApi();
   if (api) return api.availability(); // 'unavailable' | 'downloadable' | 'downloading' | 'available'
   if (firefoxMlApi()) return 'trial-ml'; // Firefox AI Runtime present; model fetched lazily
+  if (litertApi()) {
+    // 'litert-ready' | 'litert-needs-model' | 'litert-no-runtime'
+    const s = await litertApi().status();
+    if (s !== 'litert-no-runtime') return s; // no vendored runtime = same as no backend
+  }
   return 'unsupported';
 }
 
@@ -237,6 +275,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     aiStatus().then(
       (status) => {
         if (status === 'available') warmup(); // options page is polling; get ready
+        // LiteRT is only ever warmed here — from the options page, model
+        // already on disk — never at browser startup: engine creation pulls
+        // the whole model into RAM, which is hostile on a phone unless the
+        // user is actively engaging with the arbiter.
+        if (status === 'litert-ready') litertApi().warmup();
         sendResponse({ status });
       },
       () => sendResponse({ status: 'unsupported' })

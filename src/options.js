@@ -24,6 +24,8 @@
     aiFill: document.getElementById('aiFill'),
     aiDownload: document.getElementById('aiDownload'),
     aiGrant: document.getElementById('aiGrant'),
+    aiLitertDownload: document.getElementById('aiLitertDownload'),
+    aiLitertDelete: document.getElementById('aiLitertDelete'),
     aiTestQuery: document.getElementById('aiTestQuery'),
     aiTest: document.getElementById('aiTest'),
     aiTestResult: document.getElementById('aiTestResult'),
@@ -82,25 +84,7 @@
   // repainting so they don't clobber a percentage or an error message.
   let paintedState = null;
 
-  async function aiAvailability() {
-    // Chrome: the Prompt API is exposed to this page directly.
-    if (typeof LanguageModel !== 'undefined') {
-      try {
-        return await LanguageModel.availability();
-      } catch (e) {
-        return 'unavailable';
-      }
-    }
-    // Firefox: trialML is an *optional* permission — until it's granted the
-    // trial.ml namespace doesn't exist in any context, so check the grant
-    // before asking the worker (which would just say 'unsupported').
-    if (typeof browser !== 'undefined' && browser.permissions) {
-      try {
-        const granted = await browser.permissions.contains({ permissions: ['trialML'] });
-        if (!granted) return 'needs-permission';
-      } catch (e) { /* permission name unknown here — fall through to the worker */ }
-    }
-    // Not Chrome: ask the worker, which knows about the Firefox AI Runtime.
+  function workerStatus() {
     return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage({ type: 'DR_NO_AI_STATUS' }, (res) => {
@@ -111,6 +95,35 @@
         resolve('unsupported');
       }
     });
+  }
+
+  async function aiAvailability() {
+    // Chrome: the Prompt API is exposed to this page directly.
+    if (typeof LanguageModel !== 'undefined') {
+      try {
+        return await LanguageModel.availability();
+      } catch (e) {
+        return 'unavailable';
+      }
+    }
+    // Not Chrome: the worker knows about the Firefox AI Runtime and the
+    // LiteRT prototype backend ('trial-ml' | 'litert-*' | 'unsupported').
+    const status = await workerStatus();
+    if (status === 'trial-ml' || status === 'litert-ready') return status;
+
+    // trialML is an *optional* permission — until granted, trial.ml doesn't
+    // exist anywhere, so on desktop a grant may unlock the (much smaller)
+    // AI Runtime path and is the better first suggestion. On Android the
+    // grant is a dead end — trial.ml isn't shipped there — so surface the
+    // LiteRT path instead of a button that can't help.
+    const android = /Android/i.test(navigator.userAgent);
+    if (!android && typeof browser !== 'undefined' && browser.permissions) {
+      try {
+        const granted = await browser.permissions.contains({ permissions: ['trialML'] });
+        if (!granted) return 'needs-permission';
+      } catch (e) { /* permission name unknown here — fall through */ }
+    }
+    return status;
   }
 
   function showProgressBar(pct) {
@@ -127,8 +140,10 @@
   function paintAiStatus(state) {
     els.aiDownload.style.display = state === 'downloadable' ? 'inline-block' : 'none';
     els.aiGrant.style.display = state === 'needs-permission' ? 'inline-block' : 'none';
+    els.aiLitertDownload.style.display = state === 'litert-needs-model' ? 'inline-block' : 'none';
+    els.aiLitertDelete.style.display = state === 'litert-ready' ? 'inline-block' : 'none';
     if (state === 'downloading') showProgressBar(null);
-    else els.aiProgress.style.display = 'none';
+    else if (state !== 'litert-downloading') els.aiProgress.style.display = 'none';
     els.aiStatus.textContent =
       state === 'available' ? 'Model ready — borderline searches are checked on-device.'
       : state === 'downloading' ? 'Downloading model… It’s a few GB, so this can take several minutes. ' +
@@ -138,6 +153,11 @@
         'use its AI runtime first. Until then only the keyword rules apply.'
       : state === 'trial-ml' ? 'Firefox AI Runtime detected (experimental). The arbiter downloads its model ' +
         '(~70MB) the first time it is asked — use “Test the arbiter” below to trigger and check it.'
+      : state === 'litert-ready' ? 'LiteRT model on disk — borderline searches are checked on-device ' +
+        '(prototype backend; the first query after a restart reloads the model and can be slow).'
+      : state === 'litert-needs-model' ? 'LiteRT runtime bundled (prototype). Download the Gemma model to run ' +
+        'the arbiter fully on-device — including on Firefox for Android. Until then only the keyword rules apply.'
+      : state === 'litert-downloading' ? 'Downloading Gemma model… Keep this page open; the download stops if it closes.'
       : state === 'unsupported' ? 'No on-device AI in this browser (needs Chrome 138+, or Firefox 134+ with ' +
         'browser.ml.enable and extensions.ml.enabled set in about:config). Keyword rules still work.'
       : 'Model unavailable on this device (hardware requirements not met). Keyword rules still work.';
@@ -145,6 +165,9 @@
 
   async function aiTick() {
     const state = await aiAvailability();
+    // A LiteRT download in flight is invisible to availability (the OPFS write
+    // only lands on close), so don't let the poll repaint over the progress bar.
+    if (paintedState === 'litert-downloading' && state === 'litert-needs-model') return;
     if (state === paintedState) return;
     paintedState = state;
     paintAiStatus(state);
@@ -238,6 +261,37 @@
       paintAiStatus(paintedState);
       els.aiStatus.textContent = 'Model download failed: ' + e.message;
     }
+  });
+
+  // LiteRT (prototype): the model download runs here, in the page, because it
+  // needs a user gesture and a progress bar — but it writes to OPFS, which the
+  // background worker shares, so the worker sees the model the moment the
+  // status poll flips to litert-ready (and warms the engine then).
+  els.aiLitertDownload.addEventListener('click', async () => {
+    paintedState = 'litert-downloading';
+    paintAiStatus('litert-downloading');
+    showProgressBar(null);
+    try {
+      await DR_NO_LITERT.downloadModel((loaded, total) => {
+        const size = total || DR_NO_LITERT.MODEL.approxBytes;
+        const pct = Math.max(0, Math.min(100, Math.round((loaded / size) * 100)));
+        showProgressBar(pct);
+        els.aiStatus.textContent =
+          'Downloading Gemma model… ' + pct + '% (' + Math.round(loaded / 1048576) + ' MB)';
+      });
+      paintedState = null; // next tick repaints (normally litert-ready) and warms the engine
+      aiTick();
+    } catch (e) {
+      paintedState = await aiAvailability();
+      paintAiStatus(paintedState);
+      els.aiStatus.textContent = 'Model download failed: ' + e.message;
+    }
+  });
+
+  els.aiLitertDelete.addEventListener('click', async () => {
+    await DR_NO_LITERT.deleteModel();
+    paintedState = null;
+    aiTick();
   });
 
   setInterval(aiTick, AI_POLL_MS);

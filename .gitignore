@@ -2,6 +2,10 @@
 dist/
 *.zip
 
+# Vendored LiteRT runtime (third-party JS+WASM, ~55MB) — fetched at dev time
+# by tools/fetch-litert-runtime.sh, never committed.
+src/vendor/
+
 # Chrome packs .crx alongside a private signing key; never commit the key.
 *.crx
 *.pem
