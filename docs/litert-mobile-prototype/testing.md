@@ -1,5 +1,26 @@
 # Testing status, plan, and known risks
 
+## Emulator session results (2026-07-18)
+
+Environment: Android 16 (API 36, Play x86_64 image) emulator via the
+`android` CLI, Firefox Nightly 154.0a1 (universal APK), extension loaded as a
+temporary add-on with `web-ext run --target=firefox-android`.
+
+| Matrix # | Result | Notes |
+| --- | --- | --- |
+| 9 — core blocking | ✅ PASS | `google.com/search?q=diabetes` → full overlay, ASCII cat, correct reason. Host permissions auto-granted on temporary install |
+| 10 — popup | ✅ PASS | Opens full-width; `pointer: coarse` branch active (large toggle, tap-sized options link) |
+| 11 — options Android branch | ✅ PASS | Vendored runtime **imports inside Fenix** (status = `litert-needs-model`, not `unsupported`), OPFS probe works, LiteRT download button shown, trialML grant button correctly suppressed (UA branch) |
+| 12 — model download | ⚠️ BLOCKED (error path ✅) | Download fails **HTTP 401**: all official LiteRT LLM bundles on HF are license-gated (see [model-selection.md](model-selection.md)). Clean failure — error surfaced in status line, retry button restored, no corrupt OPFS state |
+| 13/14 — inference warm/cold | ⏸ NOT RUN | Needs a model; supply via the `litertModelUrl` override after accepting the HF license |
+| 15 — memory pressure | ⏸ NOT RUN | Meaningless on an emulator anyway (configurable RAM) |
+
+Net: everything up to the model bytes is proven on real Fenix/GeckoView —
+manifest, content script, popup CSS, options states, runtime import, OPFS,
+message plumbing, and the download error path. The remaining unknowns
+(items 1, 3, 4 in the NOT-verified list below) all sit behind the license
+gate, not behind code.
+
 ## Verified on this branch
 
 - `node --check` on all touched/added JS; JSON parse on both manifests.

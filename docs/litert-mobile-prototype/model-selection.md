@@ -62,8 +62,21 @@ gemma3-1b-it-int8-web.task   1.01 GB   (if q4 quality disappoints)
 
 Why it wins for a prototype:
 
-- **Ungated.** The repo is publicly listable and fetchable — the options-page
-  download button works with a plain `fetch`, no token.
+- **Least-gated.** ~~Ungated~~ — **correction (2026-07-18, found during
+  emulator testing):** the repo's file *listing* is public, but `/resolve/`
+  downloads answer **HTTP 401** anonymously. The whole `litert-community`
+  org (and `google/*-litert-*`) is license-gated; Gemma3-1B-IT is merely
+  auto-gated (instant click-through with any HF account) where E2B needs the
+  full Gemma license flow. The extension's one-click download therefore
+  fails out of the box with a clean, retryable error — by design it cannot
+  embed anyone's HF token. To supply the model: accept the license on
+  huggingface.co, download the `.task` file yourself, and use the
+  `litertModelUrl` override in `src/arbiter-litert.js` (serve the file
+  locally, e.g. `python -m http.server` + `http://10.0.2.2:8765/…` from an
+  emulator).
+  Do **not** grab it from unofficial HF mirrors: the one existing mirror of
+  this file was checked and its LFS sha256 does not match the official
+  bytes at identical size — treat that as disqualifying.
 - **Web-targeted.** The `-web.task` builds are packaged for exactly the WASM
   runtime we vendor (`@mediapipe/tasks-genai`), which is the LiteRT engine
   compiled for the browser.

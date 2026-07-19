@@ -29,11 +29,15 @@
   'use strict';
 
   // Default model: Gemma 3 1B instruction-tuned, q4_0, web-optimized .task.
-  // Chosen over the requested Gemma 3n E2B for the prototype because the E2B
-  // repo on Hugging Face is license-gated (fetch returns 401 without an
-  // accepted-license token) and its int4 bundle is ~3GB — see
-  // docs/litert-mobile-prototype/model-selection.md for the full comparison
-  // and for how to point this constant at E2B once you have access.
+  // Chosen over the requested Gemma 3n E2B because its int4 bundle is ~3GB.
+  //
+  // GATING (verified on an emulator, 2026-07-18): every LiteRT LLM bundle on
+  // Hugging Face — this one included — sits behind a Gemma/model license
+  // click-through, so the anonymous fetch below fails with HTTP 401. The
+  // options page surfaces that error and offers a retry; to actually get the
+  // model, accept the license with an HF account, download the file
+  // out-of-band, and serve it via the litertModelUrl override below. See
+  // docs/litert-mobile-prototype/model-selection.md.
   const MODEL = {
     id: 'gemma3-1b-it-q4_0-web',
     file: 'gemma3-1b-it-q4_0-web.task',
@@ -96,11 +100,18 @@
   // rewritten under the real name is not needed — OPFS has no rename, so we
   // download to the final handle and delete it on failure).
   async function downloadModel(onProgress) {
+    // Dev override for the gated default URL: point at a file you obtained
+    // yourself (e.g. `http://10.0.2.2:8765/model.task` served from the host
+    // machine when testing in an emulator). Set from any extension context:
+    //   chrome.storage.local.set({ litertModelUrl: '…' })
+    const store = await chrome.storage.local.get('litertModelUrl');
+    const url = store.litertModelUrl || MODEL.url;
+
     const dir = await modelDir();
     const handle = await dir.getFileHandle(MODEL.file, { create: true });
     const writable = await handle.createWritable(); // truncates any partial file
     try {
-      const res = await fetch(MODEL.url);
+      const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status + ' fetching model');
       const total = Number(res.headers.get('content-length')) || null;
       const reader = res.body.getReader();
