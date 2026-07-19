@@ -11,15 +11,17 @@ temporary add-on with `web-ext run --target=firefox-android`.
 | 9 — core blocking | ✅ PASS | `google.com/search?q=diabetes` → full overlay, ASCII cat, correct reason. Host permissions auto-granted on temporary install |
 | 10 — popup | ✅ PASS | Opens full-width; `pointer: coarse` branch active (large toggle, tap-sized options link) |
 | 11 — options Android branch | ✅ PASS | Vendored runtime **imports inside Fenix** (status = `litert-needs-model`, not `unsupported`), OPFS probe works, LiteRT download button shown, trialML grant button correctly suppressed (UA branch) |
-| 12 — model download | ⚠️ BLOCKED (error path ✅) | Download fails **HTTP 401**: all official LiteRT LLM bundles on HF are license-gated (see [model-selection.md](model-selection.md)). Clean failure — error surfaced in status line, retry button restored, no corrupt OPFS state |
-| 13/14 — inference warm/cold | ⏸ NOT RUN | Needs a model; supply via the `litertModelUrl` override after accepting the HF license |
-| 15 — memory pressure | ⏸ NOT RUN | Meaningless on an emulator anyway (configurable RAM) |
+| 12 — model download | ⚠️ BLOCKED (error path ✅) | Two independent blockers, both surfaced cleanly with retry: (a) **HTTP 401** — all official LiteRT LLM bundles on HF are license-gated (see [model-selection.md](model-selection.md)); (b) with a locally-served, licensed copy of the model: **"Quota exceeded"** — Fenix OPFS origin quota (~10% of free disk; emulator had 3.2GB free) cannot hold 776MB. `--pref` quota lifts are ignored on the Android web-ext target |
+| 13/14 — inference warm/cold | ❌ ENGINE CANNOT START (fallback ✅) | With the model streamed from a local server (OPFS bypassed, dev hack): `LlmInference.createFromOptions` fails in **~16ms** — *"Unable to request adapter from navigator.gpu; Ensure WebGPU is enabled."* **MediaPipe LLM web is WebGPU-only (no CPU fallback), and Fenix ships no WebGPU.** The graceful-degradation contract held exactly as designed: arbiter reports unavailable, gray searches fall back to keyword-only behavior |
+| 15 — memory pressure | ⏸ NOT RUN | Moot until an engine can start; emulator RAM is unrepresentative anyway |
 
-Net: everything up to the model bytes is proven on real Fenix/GeckoView —
-manifest, content script, popup CSS, options states, runtime import, OPFS,
-message plumbing, and the download error path. The remaining unknowns
-(items 1, 3, 4 in the NOT-verified list below) all sit behind the license
-gate, not behind code.
+Net: everything this branch's code controls is proven on real Fenix/GeckoView
+— manifest, content script, popup CSS, options states, runtime import, OPFS
+probing, message plumbing, and every error path. Actual inference is blocked
+by two platform gates, not by code: HF model licensing (user click-through +
+storage quota) and, decisively, **no WebGPU on Firefox for Android yet**.
+When Fenix ships WebGPU (Mozilla's 2026 Android roadmap), rerun 13–15 on a
+real device.
 
 ## Verified on this branch
 
@@ -79,6 +81,11 @@ Record 13/14 numbers in this file when they exist.
 
 ## <a name="known-risks"></a>Known risks & follow-ups, ranked
 
+0. **WebGPU dependency (now confirmed the gating fact).** MediaPipe LLM web
+   has no CPU path; the whole backend waits on Fenix WebGPU. Follow-ups:
+   watch the Fenix WebGPU rollout; or evaluate a WASM-CPU LLM runtime
+   (wllama/llama.cpp-WASM) as an interim non-LiteRT engine if Android
+   coverage matters before then.
 1. **Cold-start vs the 3.5s budget.** On Android CPU the cold path (load
    776MB + prefill) will essentially always fall back statically; only warm
    repeats benefit. Mitigations to explore: persist verdicts to

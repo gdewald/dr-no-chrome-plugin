@@ -59,21 +59,30 @@ grant that can't help.
 
 ## Compute reality on Android
 
-### WebGPU: not yet
+### WebGPU: REQUIRED, and Fenix doesn't ship it yet
 
-The MediaPipe/LiteRT web runtime prefers WebGPU and falls back to WASM CPU
-(XNNPACK). As of mid-2026, **WebGPU in Firefox is enabled on Windows (141+)
-and macOS ARM (145+); on Android it exists only behind
-`dom.webgpu.enabled`** with Mozilla planning Android work in 2026. So:
+**Verified on an emulator (2026-07-18), correcting this document's earlier
+assumption:** MediaPipe's LLM Inference task on web is **WebGPU-only — there
+is no WASM/CPU fallback for the LLM task** (vision tasks have one; LLM does
+not). On Firefox Nightly 154 for Android, engine creation fails in ~16ms
+with:
 
-- **Assume CPU inference on Fenix.** SIMD WASM is present; expect the
-  1B-q4 model to prefill+decode our ~200-token prompt in single-digit
-  seconds on a flagship, worse on mid-range hardware. (Measure — see
-  [testing.md](testing.md); these are expectations, not measurements.)
-- The first query after browser start also pays the model load
-  (~776MB from OPFS into WASM memory).
-- When Fenix ships WebGPU, the same vendored runtime should light it up
-  without code changes here.
+> Unable to request adapter from navigator.gpu; Ensure WebGPU is enabled.
+
+As of mid-2026, WebGPU in Firefox is enabled on Windows (141+) and macOS ARM
+(145+); on Android it exists only behind `dom.webgpu.enabled`, with Mozilla
+planning Android work in 2026. Consequences:
+
+- **The LiteRT arbiter is inert on today's Fenix.** It fails fast and the
+  per-shape static fallbacks take over — verified live: the options test box
+  reports "Arbiter unavailable after 16ms … Gray searches fall back to
+  keyword-only behavior", and blocking behaves exactly pre-AI. Nothing
+  breaks; the feature simply waits on the platform.
+- When Fenix ships WebGPU, the same vendored runtime should light up without
+  code changes here — that moment is the trigger to re-run
+  [testing.md](testing.md) items 13–15.
+- The cold-start latency discussion below is therefore theoretical until
+  then.
 
 ### <a name="memory"></a>Memory
 
@@ -88,10 +97,17 @@ worse, which is half the reason it isn't the default
 
 ### Storage
 
-OPFS quota on Firefox is a share of free disk; 776MB is generally fine but
-eviction is possible if the device is starved — `litert-needs-model` will
-simply reappear and the user can re-download. The model never counts against
-`storage.sync/local` quotas.
+OPFS quota on Firefox is a share of free disk — and on small devices that
+share is not enough. **Measured on the emulator (5.8GB data partition,
+3.2GB free): the 776MB write fails with "Quota exceeded"** — Firefox's
+per-origin group limit is roughly 10% of free disk, i.e. ~320MB there. A
+real phone with 30+GB free is fine; a storage-starved one is not, and the
+options page surfaces the quota error cleanly with a retry. Note for tests:
+`web-ext run --pref dom.quotaManager.temporaryStorage.fixedLimit=…` is
+ignored on the Android target, so the quota can't be lifted from the dev
+loop — grow the emulator's data partition instead, or stream the model
+without OPFS (dev-only hack, see testing notes). The model never counts
+against `storage.sync/local` quotas.
 
 ## Installing on a device
 
